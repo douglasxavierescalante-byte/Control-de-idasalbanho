@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control de Salidas y Regresos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#1E3450;
+    --navy-dark:#122438;
+    --paper:#F6F4EF;
+    --card:#FFFFFF;
+    --ink:#1C2430;
+    --ink-soft:#5B6472;
+    --line:#DAD5C8;
+    --amber:#C97F1E;
+    --amber-soft:#F3E2C4;
+    --green:#2F7A52;
+    --green-soft:#DCEEE3;
+    --red:#B0392C;
+    --red-soft:#F5DEDA;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Libre Franklin',sans-serif;
+    background:var(--paper);
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:20px 16px 60px;}
+  header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding:18px 20px;
+    background:var(--navy);
+    border-radius:14px;
+    color:#fff;
+    margin-bottom:18px;
+  }
+  header h1{
+    font-size:18px;
+    font-weight:600;
+    margin:0;
+    letter-spacing:0.2px;
+  }
+  header .sub{
+    font-size:12px;
+    color:#B9C6D6;
+    margin-top:2px;
+    font-family:'IBM Plex Mono',monospace;
+  }
+  .sync-dot{
+    width:8px;height:8px;border-radius:50%;
+    background:#7CC49A;
+    display:inline-block;
+    margin-right:6px;
+    box-shadow:0 0 0 3px rgba(124,196,154,0.25);
+  }
+  .sync-dot.off{background:#D98A6D;box-shadow:0 0 0 3px rgba(217,138,109,0.25);}
+  .tabs{
+    display:flex;
+    gap:8px;
+    margin-bottom:16px;
+    border-bottom:2px solid var(--line);
+  }
+  .tab{
+    padding:10px 18px;
+    font-size:14px;
+    font-weight:600;
+    color:var(--ink-soft);
+    background:none;
+    border:none;
+    cursor:pointer;
+    border-bottom:3px solid transparent;
+    margin-bottom:-2px;
+    font-family:'Libre Franklin',sans-serif;
+  }
+  .tab.active{
+    color:var(--navy);
+    border-bottom-color:var(--amber);
+  }
+  .panel{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:20px;
+    margin-bottom:18px;
+  }
+  .field{margin-bottom:14px;}
+  .field label{
+    display:block;
+    font-size:12px;
+    font-weight:600;
+    text-transform:uppercase;
+    letter-spacing:0.4px;
+    color:var(--ink-soft);
+    margin-bottom:6px;
+  }
+  select, input[type=text]{
+    width:100%;
+    padding:11px 12px;
+    font-size:15px;
+    border:1.5px solid var(--line);
+    border-radius:8px;
+    background:#fff;
+    color:var(--ink);
+    font-family:'Libre Franklin',sans-serif;
+  }
+  select:focus, input[type=text]:focus{
+    outline:none;
+    border-color:var(--navy);
+  }
+  .status-card{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding:14px 16px;
+    border-radius:10px;
+    margin-bottom:16px;
+    font-size:14px;
+    border:1.5px dashed var(--line);
+    background:#FBFAF7;
+  }
+  .status-card.out{
+    border-color:var(--amber);
+    background:var(--amber-soft);
+    color:#6B4713;
+  }
+  .status-card .time{
+    font-family:'IBM Plex Mono',monospace;
+    font-weight:600;
+  }
+  .btn-row{display:flex;gap:10px;flex-wrap:wrap;}
+  button.action{
+    flex:1;
+    min-width:150px;
+    padding:13px 16px;
+    font-size:15px;
+    font-weight:600;
+    border:none;
+    border-radius:10px;
+    cursor:pointer;
+    color:#fff;
+    font-family:'Libre Franklin',sans-serif;
+  }
+  button.action:active{transform:scale(0.98);}
+  button.salida{background:var(--amber);}
+  button.regreso{background:var(--green);}
+  button.action:disabled{background:#C7C3B6;cursor:not-allowed;}
+  .msg{
+    margin-top:12px;
+    padding:10px 12px;
+    border-radius:8px;
+    font-size:13px;
+    display:none;
+  }
+  .msg.show{display:block;}
+  .msg.ok{background:var(--green-soft);color:#1D5138;}
+  .msg.warn{background:var(--red-soft);color:#7A281D;}
+  .log-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:10px;
+  }
+  .log-header h2{
+    font-size:15px;
+    font-weight:600;
+    margin:0;
+    color:var(--navy);
+  }
+  .refresh-btn{
+    border:1.5px solid var(--line);
+    background:#fff;
+    color:var(--ink-soft);
+    font-size:12px;
+    padding:6px 12px;
+    border-radius:20px;
+    cursor:pointer;
+    font-family:'Libre Franklin',sans-serif;
+  }
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  thead th{
+    text-align:left;
+    padding:9px 8px;
+    background:var(--navy);
+    color:#fff;
+    font-weight:600;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:0.3px;
+  }
+  thead th:first-child{border-radius:8px 0 0 0;}
+  thead th:last-child{border-radius:0 8px 0 0;}
+  tbody td{
+    padding:9px 8px;
+    border-bottom:1px solid var(--line);
+    vertical-align:top;
+  }
+  tbody tr:nth-child(even){background:#FAF8F3;}
+  .time-cell{font-family:'IBM Plex Mono',monospace;font-size:12.5px;white-space:nowrap;}
+  .pill{
+    display:inline-block;
+    padding:2px 8px;
+    border-radius:20px;
+    font-size:11px;
+    font-weight:600;
+  }
+  .pill.out{background:var(--amber-soft);color:#6B4713;}
+  .pill.in{background:var(--green-soft);color:#1D5138;}
+  .empty-row td{
+    text-align:center;
+    color:var(--ink-soft);
+    padding:24px 8px;
+    font-style:italic;
+  }
+  .table-scroll{
+    overflow-x:auto;
+    border-radius:8px;
+    border:1px solid var(--line);
+  }
+  .obs-input{
+    width:100%;
+    font-size:12px;
+    padding:4px 6px;
+    border:1px solid var(--line);
+    border-radius:5px;
+  }
+  @media (max-width:600px){
+    thead th:nth-child(2), tbody td:nth-child(2){display:none;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1>Control de salidas y regresos</h1>
+      <div class="sub" id="sub-status"><span class="sync-dot" id="syncDot"></span>conectando...</div>
+    </div>
+    <button class="refresh-btn" id="settingsBtn" style="background:transparent;color:#EAEFF5;border-color:#4A6A8F;">⚙ Configurar</button>
+  </header>
+
+  <div class="panel" id="settingsPanel" style="display:none;">
+    <div class="field">
+      <label for="sheetsUrl">URL de la aplicación web de Google Apps Script</label>
+      <input type="text" id="sheetsUrl" placeholder="https://script.google.com/macros/s/AKfycb.../exec">
+    </div>
+    <div class="btn-row">
+      <button class="action regreso" id="saveConfigBtn">Guardar conexión</button>
+    </div>
+    <div class="msg" id="configMsg"></div>
+  </div>
+
+  <div class="tabs" id="tabs"></div>
+
+  <div class="panel">
+    <div class="field">
+      <label for="studentSelect">Nombre del estudiante</label>
+      <select id="studentSelect"></select>
+    </div>
+    <div class="field">
+      <label for="motivo">Motivo de salida</label>
+      <input type="text" id="motivo" list="motivos" placeholder="Baño, enfermería, dirección...">
+      <datalist id="motivos">
+        <option value="Baño">
+        <option value="Enfermería">
+        <option value="Dirección">
+        <option value="Actividad">
+        <option value="Otro">
+      </datalist>
+    </div>
+    <div class="field">
+      <label for="observaciones">Observaciones (opcional)</label>
+      <input type="text" id="observaciones" placeholder="Notas adicionales...">
+    </div>
+
+    <div class="status-card" id="statusCard">Seleccione un estudiante para ver su estado.</div>
+
+    <div class="btn-row">
+      <button class="action salida" id="btnSalida">Registrar salida</button>
+      <button class="action regreso" id="btnRegreso">Registrar regreso</button>
+    </div>
+    <div class="msg" id="msgBox"></div>
+  </div>
+
+  <div class="panel">
+    <div class="log-header">
+      <h2 id="logTitle">Registro — 2° A</h2>
+      <button class="refresh-btn" id="refreshBtn">↻ Actualizar</button>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Estudiante</th>
+            <th>Motivo</th>
+            <th>Salida</th>
+            <th>Regreso</th>
+            <th>Estado</th>
+            <th>Obs.</th>
+          </tr>
+        </thead>
+        <tbody id="logBody">
+          <tr class="empty-row"><td colspan="6">Cargando registro...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const GRADES = {
+  "2A": {
+    label: "2° A",
+    students: [
+      "ABREGO PATRIZ, DARLYN FERNANDA","AQUINO PATRIZ, NAOMY CAMILA","ARANA GARCIA, SOFIA ESMERALDA",
+      "CALDERON CENTENO, JOSUE NEHEMIAS","CARPIO HERNANDEZ, HAMILTON JOSUE","CARPIO MONTECINOS, GLORIA ALEXANDRA",
+      "CARTAGENA POSADA, SOFIA ABIGAIL","Castillo Sandoval, Heitan Miguel","CASTRO ABREGO, FRANCISCO ROMAN",
+      "CLEMENTE ALVAREZ, ALISSON SOPHIA","CONTRERAS GUARDADO, CHRISTIAN DANIEL","CONTRERAS HERRERA, JOSÉ EDUARDO",
+      "CRUZ CRUZ, ALAN FABRICIO","CRUZ DUBÓN, ASHLEY BEATRIZ","CRUZ MORÁN, MATIAS ANDREE",
+      "CRUZ RONQUILLO, ELISA ALEJANDRA","GUARDADO SALGUERO, KENNER ANDRES","Hernandez Chavez, Allison Valeria",
+      "JUAREZ HERNANDEZ, EMERSON JAIR","LOBOS SALAZAR, PABLO ALEXANDER","LOPEZ MARTINEZ, MARGARITA BEATRIZ",
+      "MARROQUIN DELGADO, OWEN ALEJANDRO","MARTINEZ ALVARADO, ADRIANA LISETH","MARTINEZ DUEÑAS, ANDERSON ALEXANDER",
+      "MARTINEZ GARCIA, ANDREA LISSETTE","MARTINEZ HERNANDEZ, RUTH ABIGAIL","MEJIA FIGUEROA, EIDAN MATEO",
+      "MONTEROLA JUÁREZ, MAURICIO ALEXANDER","MUÑOZ FLORES, MARJORIE ABIGAIL","PACHECO RIVERA, ADRIÁN ALEXIS",
+      "PALMA RODRIGUEZ, MAURICIO ERNESTO","RAMIREZ PAIS, MELVIN ALEXANDER","RAMOS RAMIREZ, DANIEL AARON",
+      "RIVERA PEREZ, ELIZABETH ABIGAIL","RODRIGUEZ CARTAGENA, MARJORIE ADRIANA","RODRIGUEZ MIRANDA, EMELY JAZMIN",
+      "Salazar Yanes, Daniel Esaí","SAYES SALGUERO, LIAM EZEQUIEL","VALDES SILVA, ASHLEY ALESSANDRA",
+      "ZEPEDA GÁLVEZ, NOHEMI ABIGAIL"
+    ]
+  },
+  "5C": {
+    label: "5° C",
+    students: [
+      "ALFARO MARTINEZ, ARIEL EDGARDO","ALVARADO RONQUILLO, ANTHONY EZEQUIEL","BLANCO CARABANTES, EMELY KAORI",
+      "COTO PEREZ, FATIMA MARIA","DAMAS RONQUILLO, AXEL ISAAC","DELGADO MORALES, JONATHAN ARMANDO",
+      "ESCOBAR RODRIGUEZ, MEREDITH ALEXANDRA","FAJARDO LOPEZ, LUIS FERNANDO","FLORES AQUINO, NATALY JEANNETTE",
+      "FLORES CASTANEDA, GISSELLE ALEXANDRA","GONZALEZ PEREZ, STEPHANNIE PAOLA","GUARDADO GARCIA, FIORELLA VALERIA",
+      "GUILLEN RIVERA, MARÍA JOSÉ","Hernández Cruz, Nahomy Stephanie","HERRERA AGUILAR, EDWIN STANLEY",
+      "HIDALGO RODRIGUEZ, JAZMIN DE LOS ANGELES","LIMA CARIAS, JOSE HERIBERTO","LINARES ALAS, KATHERINNE ANDREA",
+      "LOPEZ LOPEZ, KATHERINE ESPERANZA","Magaña Aguirre, Josue Obed","MARTINEZ VALLE, ANGELI NAYELI",
+      "ORDOÑEZ PINTO, FRANCISCO ADONAY","RAMOS LÓPEZ, ADA FABIOLA","RAMOS LOPEZ, ALEJANDRA CAROLINA",
+      "RECINOS DELGADO, MIRIAM VALERIA","SANTAMARIA LINARES, VALERIA ALEXANDRA","SANTOS ROSALES, ESTEBAN OTONIEL",
+      "VALENCIA CARPIO, BRITTANY NATASHA"
+    ]
+  }
+};
+
+// ── CONFIGURACIÓN ──────────────────────────────────────────────
+// Opción A (recomendada para uso compartido en la escuela): pega aquí
+// la URL de tu aplicación web de Apps Script para que quede lista
+// para todos sin que cada persona tenga que configurarla.
+const HARDCODED_SHEETS_URL = "https://script.google.com/macros/s/AKfycbzT-EsYsHuZXcv2uKgQr2p-WGL9z1k3fq_IPuxnqLocv5cO1SenH3_-ZPn9lXhRuNzvng/exec"; // ej: "https://script.google.com/macros/s/AKfycb.../exec"
+// Opción B: dejar esto vacío y cada dispositivo la configura una vez
+// con el botón "⚙ Configurar" (se guarda en ese navegador con localStorage).
+// ────────────────────────────────────────────────────────────────
+
+const LOCAL_KEY = "salidas_sheets_url";
+let currentGrade = "2A";
+let records = {};
+let syncOk = false;
+let pollTimer = null;
+let sheetsUrl = "";
+
+function sortedStudents(gradeKey){
+  return [...GRADES[gradeKey].students].sort((a,b)=> a.localeCompare(b,'es',{sensitivity:'base'}));
+}
+
+function loadConfig(){
+  let stored = "";
+  try{ stored = localStorage.getItem(LOCAL_KEY) || ""; }catch(e){ stored = ""; }
+  sheetsUrl = stored || HARDCODED_SHEETS_URL || "";
+  document.getElementById("sheetsUrl").value = sheetsUrl;
+  if(!sheetsUrl){
+    document.getElementById("settingsPanel").style.display = "block";
+  }
+}
+
+function saveConfig(){
+  const url = document.getElementById("sheetsUrl").value.trim();
+  const msg = document.getElementById("configMsg");
+  if(!url){
+    msg.className = "msg show warn";
+    msg.textContent = "Pega la URL de tu aplicación web de Apps Script.";
+    return;
+  }
+  sheetsUrl = url;
+  try{ localStorage.setItem(LOCAL_KEY, url); }catch(e){ /* localStorage no disponible */ }
+  msg.className = "msg show ok";
+  msg.textContent = "Conexión guardada en este navegador. Cargando datos...";
+  loadLog(true);
+}
+
+document.getElementById("settingsBtn").addEventListener("click", ()=>{
+  const p = document.getElementById("settingsPanel");
+  p.style.display = p.style.display === "none" ? "block" : "none";
+});
+document.getElementById("saveConfigBtn").addEventListener("click", saveConfig);
+
+function fmtTime(ts){
+  if(!ts) return "";
+  const d = new Date(ts);
+  let h = d.getHours();
+  const m = d.getMinutes().toString().padStart(2,"0");
+  const s = d.getSeconds().toString().padStart(2,"0");
+  const ampm = h >= 12 ? "p.m." : "a.m.";
+  h = h % 12; if(h === 0) h = 12;
+  return h + ":" + m + ":" + s + " " + ampm;
+}
+
+function fmtDuration(startTs, endTs){
+  const end = endTs || Date.now();
+  let secs = Math.max(0, Math.floor((end - startTs)/1000));
+  const m = Math.floor(secs/60);
+  const s = secs % 60;
+  return m + "m " + s + "s";
+}
+
+function buildTabs(){
+  const tabsEl = document.getElementById("tabs");
+  tabsEl.innerHTML = "";
+  Object.keys(GRADES).forEach(key=>{
+    const b = document.createElement("button");
+    b.className = "tab" + (key === currentGrade ? " active" : "");
+    b.textContent = GRADES[key].label;
+    b.onclick = ()=>{ currentGrade = key; onGradeChange(); };
+    tabsEl.appendChild(b);
+  });
+}
+
+function buildStudentSelect(){
+  const sel = document.getElementById("studentSelect");
+  sel.innerHTML = "";
+  sortedStudents(currentGrade).forEach(name=>{
+    const opt = document.createElement("option");
+    opt.value = name; opt.textContent = name;
+    sel.appendChild(opt);
+  });
+}
+
+function onGradeChange(){
+  buildTabs();
+  buildStudentSelect();
+  document.getElementById("logTitle").textContent = "Registro — " + GRADES[currentGrade].label;
+  clearMsg();
+  loadLog(true);
+}
+
+function findActiveRecord(gradeKey, name){
+  const list = records[gradeKey] || [];
+  return list.find(r => r.name === name && !r.regreso);
+}
+
+function updateStatusCard(){
+  const name = document.getElementById("studentSelect").value;
+  const card = document.getElementById("statusCard");
+  const btnSalida = document.getElementById("btnSalida");
+  const btnRegreso = document.getElementById("btnRegreso");
+  const active = findActiveRecord(currentGrade, name);
+  if(active){
+    card.className = "status-card out";
+    card.innerHTML = "<span>" + escapeHtml(name) + " está fuera del salón (" + escapeHtml(active.motivo || "sin motivo") + ")</span><span class='time'>salió " + fmtTime(active.salida) + "</span>";
+    btnSalida.disabled = true;
+    btnRegreso.disabled = false;
+  } else {
+    card.className = "status-card";
+    card.textContent = name ? (name + " está en el salón de clase.") : "Seleccione un estudiante para ver su estado.";
+    btnSalida.disabled = false;
+    btnRegreso.disabled = true;
+  }
+}
+
+function escapeHtml(s){
+  const d = document.createElement("div");
+  d.textContent = s == null ? "" : s;
+  return d.innerHTML;
+}
+
+function showMsg(text, type){
+  const box = document.getElementById("msgBox");
+  box.textContent = text;
+  box.className = "msg show " + type;
+}
+function clearMsg(){
+  const box = document.getElementById("msgBox");
+  box.className = "msg";
+}
+
+async function loadLog(silent){
+  if(!sheetsUrl){
+    syncOk = false;
+    setSyncStatus("Configura la conexión a Google Sheets arriba.");
+    renderTable();
+    return;
+  }
+  try{
+    const res = await fetch(sheetsUrl + "?grade=" + encodeURIComponent(currentGrade), { method: "GET" });
+    const data = await res.json();
+    records[currentGrade] = (data.records || []).map(r=>({
+      id: r.id, name: r.name, motivo: r.motivo, observaciones: r.observaciones,
+      salida: r.salida, regreso: r.regreso
+    }));
+    syncOk = true;
+    setSyncStatus();
+  }catch(e){
+    syncOk = false;
+    setSyncStatus("No se pudo conectar con la hoja de cálculo.");
+  }
+  renderTable();
+  updateStatusCard();
+}
+
+async function postToSheet(payload){
+  const res = await fetch(sheetsUrl, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  if(data.status !== "ok"){
+    throw new Error(data.message || "Error al guardar en la hoja de cálculo.");
+  }
+  return data;
+}
+
+function setSyncStatus(customMsg){
+  const dot = document.getElementById("syncDot");
+  const sub = document.getElementById("sub-status");
+  if(customMsg){
+    dot.className = "sync-dot off";
+    sub.innerHTML = "<span class='sync-dot off' id='syncDot'></span>" + escapeHtml(customMsg);
+    return;
+  }
+  if(syncOk){
+    dot.className = "sync-dot";
+    sub.innerHTML = "<span class='sync-dot' id='syncDot'></span>conectado a Google Sheets";
+  } else {
+    dot.className = "sync-dot off";
+    sub.innerHTML = "<span class='sync-dot off' id='syncDot'></span>sin conexión";
+  }
+}
+
+function renderTable(){
+  const body = document.getElementById("logBody");
+  const list = [...(records[currentGrade] || [])].sort((a,b)=> b.salida - a.salida);
+  if(list.length === 0){
+    body.innerHTML = "<tr class='empty-row'><td colspan='6'>Aún no hay registros para " + GRADES[currentGrade].label + ".</td></tr>";
+    return;
+  }
+  body.innerHTML = list.map(r=>{
+    const estado = r.regreso ? "<span class='pill in'>En el salón</span>" : "<span class='pill out'>Fuera (" + fmtDuration(r.salida, null) + ")</span>";
+    return "<tr>" +
+      "<td>" + escapeHtml(r.name) + "</td>" +
+      "<td>" + escapeHtml(r.motivo || "—") + "</td>" +
+      "<td class='time-cell'>" + fmtTime(r.salida) + "</td>" +
+      "<td class='time-cell'>" + (r.regreso ? fmtTime(r.regreso) : "—") + "</td>" +
+      "<td>" + estado + "</td>" +
+      "<td>" + escapeHtml(r.observaciones || "") + "</td>" +
+      "</tr>";
+  }).join("");
+}
+
+async function registrarSalida(){
+  const name = document.getElementById("studentSelect").value;
+  if(!name) return;
+  if(!sheetsUrl){
+    showMsg("Primero configura la conexión a Google Sheets (botón ⚙ Configurar).", "warn");
+    return;
+  }
+  if(findActiveRecord(currentGrade, name)){
+    showMsg(name + " ya tiene una salida registrada sin regreso.", "warn");
+    return;
+  }
+  const motivo = document.getElementById("motivo").value.trim();
+  const observaciones = document.getElementById("observaciones").value.trim();
+  const btn = document.getElementById("btnSalida");
+  btn.disabled = true;
+  try{
+    const now = Date.now();
+    await postToSheet({
+      action: "salida", grade: currentGrade, gradeLabel: GRADES[currentGrade].label,
+      name, motivo, observaciones
+    });
+    showMsg("Salida registrada para " + name + " a las " + fmtTime(now) + ".", "ok");
+    document.getElementById("motivo").value = "";
+    document.getElementById("observaciones").value = "";
+    await loadLog(true);
+  }catch(e){
+    showMsg("No se pudo guardar en la hoja de cálculo: " + e.message, "warn");
+    updateStatusCard();
+  }
+}
+
+async function registrarRegreso(){
+  const name = document.getElementById("studentSelect").value;
+  const active = findActiveRecord(currentGrade, name);
+  if(!active){
+    showMsg(name + " no tiene una salida activa registrada.", "warn");
+    return;
+  }
+  const obs = document.getElementById("observaciones").value.trim();
+  const btn = document.getElementById("btnRegreso");
+  btn.disabled = true;
+  try{
+    const now = Date.now();
+    await postToSheet({
+      action: "regreso", grade: currentGrade, gradeLabel: GRADES[currentGrade].label,
+      name, observaciones: obs
+    });
+    showMsg("Regreso registrado para " + name + " a las " + fmtTime(now) + ".", "ok");
+    document.getElementById("observaciones").value = "";
+    await loadLog(true);
+  }catch(e){
+    showMsg("No se pudo guardar en la hoja de cálculo: " + e.message, "warn");
+    updateStatusCard();
+  }
+}
+
+document.getElementById("btnSalida").addEventListener("click", registrarSalida);
+document.getElementById("btnRegreso").addEventListener("click", registrarRegreso);
+document.getElementById("studentSelect").addEventListener("change", ()=>{ clearMsg(); updateStatusCard(); });
+document.getElementById("refreshBtn").addEventListener("click", ()=> loadLog(false));
+
+buildTabs();
+buildStudentSelect();
+loadConfig();
+loadLog(true);
+
+pollTimer = setInterval(()=> loadLog(true), 8000);
+</script>
+</body>
+</html>
