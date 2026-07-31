@@ -496,6 +496,33 @@ function clearMsg(){
   box.className = "msg";
 }
 
+function jsonp(url, params){
+  return new Promise((resolve, reject)=>{
+    const cbName = "salidas_cb_" + Date.now() + "_" + Math.floor(Math.random()*100000);
+    const script = document.createElement("script");
+    let done = false;
+    const cleanup = ()=>{
+      delete window[cbName];
+      if(script.parentNode) script.parentNode.removeChild(script);
+      clearTimeout(timer);
+    };
+    window[cbName] = (data)=>{
+      done = true;
+      cleanup();
+      resolve(data);
+    };
+    const qs = new URLSearchParams({ ...params, callback: cbName }).toString();
+    script.src = url + (url.indexOf("?") >= 0 ? "&" : "?") + qs;
+    script.onerror = ()=>{
+      if(!done){ cleanup(); reject(new Error("No se pudo conectar con Google Sheets. Verifica la URL y que esté implementada para 'Cualquier usuario'.")); }
+    };
+    document.body.appendChild(script);
+    const timer = setTimeout(()=>{
+      if(!done){ cleanup(); reject(new Error("Tiempo de espera agotado al conectar con Google Sheets.")); }
+    }, 12000);
+  });
+}
+
 async function loadLog(silent){
   if(!sheetsUrl){
     syncOk = false;
@@ -504,8 +531,8 @@ async function loadLog(silent){
     return;
   }
   try{
-    const res = await fetch(sheetsUrl + "?grade=" + encodeURIComponent(currentGrade), { method: "GET" });
-    const data = await res.json();
+    const data = await jsonp(sheetsUrl, { action: "list", grade: currentGrade });
+    if(data.status === "error") throw new Error(data.message || "Error desconocido.");
     records[currentGrade] = (data.records || []).map(r=>({
       id: r.id, name: r.name, motivo: r.motivo, observaciones: r.observaciones,
       salida: r.salida, regreso: r.regreso
@@ -514,19 +541,14 @@ async function loadLog(silent){
     setSyncStatus();
   }catch(e){
     syncOk = false;
-    setSyncStatus("No se pudo conectar con la hoja de cálculo.");
+    setSyncStatus(e.message || "No se pudo conectar con la hoja de cálculo.");
   }
   renderTable();
   updateStatusCard();
 }
 
 async function postToSheet(payload){
-  const res = await fetch(sheetsUrl, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify(payload)
-  });
-  const data = await res.json();
+  const data = await jsonp(sheetsUrl, payload);
   if(data.status !== "ok"){
     throw new Error(data.message || "Error al guardar en la hoja de cálculo.");
   }
