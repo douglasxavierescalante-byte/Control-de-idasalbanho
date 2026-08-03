@@ -7,6 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <style>
   :root{
     --navy:#1E3450;
@@ -226,13 +228,6 @@
     border-radius:8px;
     border:1px solid var(--line);
   }
-  .obs-input{
-    width:100%;
-    font-size:12px;
-    padding:4px 6px;
-    border:1px solid var(--line);
-    border-radius:5px;
-  }
   @media (max-width:600px){
     thead th:nth-child(2), tbody td:nth-child(2){display:none;}
   }
@@ -246,19 +241,7 @@
       <h1>Control de salidas y regresos</h1>
       <div class="sub" id="sub-status"><span class="sync-dot" id="syncDot"></span>conectando...</div>
     </div>
-    <button class="refresh-btn" id="settingsBtn" style="background:transparent;color:#EAEFF5;border-color:#4A6A8F;">⚙ Configurar</button>
   </header>
-
-  <div class="panel" id="settingsPanel" style="display:none;">
-    <div class="field">
-      <label for="sheetsUrl">URL de la aplicación web de Google Apps Script</label>
-      <input type="text" id="sheetsUrl" placeholder="https://script.google.com/macros/s/AKfycb.../exec">
-    </div>
-    <div class="btn-row">
-      <button class="action regreso" id="saveConfigBtn">Guardar conexión</button>
-    </div>
-    <div class="msg" id="configMsg"></div>
-  </div>
 
   <div class="tabs" id="tabs"></div>
 
@@ -319,6 +302,20 @@
 </div>
 
 <script>
+// ── CONFIGURACIÓN DE FIREBASE ──────────────────────────────────
+// Pega aquí el objeto que Firebase te da en:
+// Configuración del proyecto → Tus apps → (ícono </>) 
+const firebaseConfig = {
+  apiKey: "AIzaSyCbaOH1scaxexMH2zcnoYVzPSGB6Vgvo6c",
+  authDomain: "control-salidas-3b9bf.firebaseapp.com",
+  databaseURL: "https://control-salidas-3b9bf-default-rtdb.firebaseio.com",
+  projectId: "control-salidas-3b9bf",
+  storageBucket: "control-salidas-3b9bf.firebasestorage.app",
+  messagingSenderId: "539883428334",
+  appId: "1:539883428334:web:1b5d9bdbe35435ee7416ff"
+};
+// ────────────────────────────────────────────────────────────────
+
 const GRADES = {
   "2A": {
     label: "2° A",
@@ -356,56 +353,30 @@ const GRADES = {
   }
 };
 
-// ── CONFIGURACIÓN ──────────────────────────────────────────────
-// Opción A (recomendada para uso compartido en la escuela): pega aquí
-// la URL de tu aplicación web de Apps Script para que quede lista
-// para todos sin que cada persona tenga que configurarla.
-const HARDCODED_SHEETS_URL = "https://script.google.com/macros/s/AKfycbxRKAlakd6CKMt7BngiSoaRU7qt-Ujh7xfw7zvy1NXGMJ9zEAjhZYLlrh8WKU56gpBIjA/exec"; // ej: "https://script.google.com/macros/s/AKfycb.../exec"
-// Opción B: dejar esto vacío y cada dispositivo la configura una vez
-// con el botón "⚙ Configurar" (se guarda en ese navegador con localStorage).
-// ────────────────────────────────────────────────────────────────
-
-const LOCAL_KEY = "salidas_sheets_url";
 let currentGrade = "2A";
 let records = {};
 let syncOk = false;
-let pollTimer = null;
-let sheetsUrl = "";
+let currentDbRef = null;
+let db = null;
+let firebaseReady = false;
+
+function initFirebase(){
+  if(firebaseConfig.apiKey === "PEGA_AQUI" || !firebaseConfig.databaseURL){
+    setSyncStatus("Falta configurar Firebase (edita firebaseConfig en el código).");
+    return;
+  }
+  try{
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
+    firebaseReady = true;
+  }catch(e){
+    setSyncStatus("Error al iniciar Firebase: " + e.message);
+  }
+}
 
 function sortedStudents(gradeKey){
   return [...GRADES[gradeKey].students].sort((a,b)=> a.localeCompare(b,'es',{sensitivity:'base'}));
 }
-
-function loadConfig(){
-  let stored = "";
-  try{ stored = localStorage.getItem(LOCAL_KEY) || ""; }catch(e){ stored = ""; }
-  sheetsUrl = stored || HARDCODED_SHEETS_URL || "";
-  document.getElementById("sheetsUrl").value = sheetsUrl;
-  if(!sheetsUrl){
-    document.getElementById("settingsPanel").style.display = "block";
-  }
-}
-
-function saveConfig(){
-  const url = document.getElementById("sheetsUrl").value.trim();
-  const msg = document.getElementById("configMsg");
-  if(!url){
-    msg.className = "msg show warn";
-    msg.textContent = "Pega la URL de tu aplicación web de Apps Script.";
-    return;
-  }
-  sheetsUrl = url;
-  try{ localStorage.setItem(LOCAL_KEY, url); }catch(e){ /* localStorage no disponible */ }
-  msg.className = "msg show ok";
-  msg.textContent = "Conexión guardada en este navegador. Cargando datos...";
-  loadLog(true);
-}
-
-document.getElementById("settingsBtn").addEventListener("click", ()=>{
-  const p = document.getElementById("settingsPanel");
-  p.style.display = p.style.display === "none" ? "block" : "none";
-});
-document.getElementById("saveConfigBtn").addEventListener("click", saveConfig);
 
 function fmtTime(ts){
   if(!ts) return "";
@@ -418,9 +389,8 @@ function fmtTime(ts){
   return h + ":" + m + ":" + s + " " + ampm;
 }
 
-function fmtDuration(startTs, endTs){
-  const end = endTs || Date.now();
-  let secs = Math.max(0, Math.floor((end - startTs)/1000));
+function fmtDuration(startTs){
+  let secs = Math.max(0, Math.floor((Date.now() - startTs)/1000));
   const m = Math.floor(secs/60);
   const s = secs % 60;
   return m + "m " + s + "s";
@@ -453,7 +423,7 @@ function onGradeChange(){
   buildStudentSelect();
   document.getElementById("logTitle").textContent = "Registro — " + GRADES[currentGrade].label;
   clearMsg();
-  loadLog(true);
+  attachListener();
 }
 
 function findActiveRecord(gradeKey, name){
@@ -496,65 +466,6 @@ function clearMsg(){
   box.className = "msg";
 }
 
-function jsonp(url, params){
-  return new Promise((resolve, reject)=>{
-    const cbName = "salidas_cb_" + Date.now() + "_" + Math.floor(Math.random()*100000);
-    const script = document.createElement("script");
-    let done = false;
-    const cleanup = ()=>{
-      delete window[cbName];
-      if(script.parentNode) script.parentNode.removeChild(script);
-      clearTimeout(timer);
-    };
-    window[cbName] = (data)=>{
-      done = true;
-      cleanup();
-      resolve(data);
-    };
-    const qs = new URLSearchParams({ ...params, callback: cbName }).toString();
-    script.src = url + (url.indexOf("?") >= 0 ? "&" : "?") + qs;
-    script.onerror = ()=>{
-      if(!done){ cleanup(); reject(new Error("No se pudo conectar con Google Sheets. Verifica la URL y que esté implementada para 'Cualquier usuario'.")); }
-    };
-    document.body.appendChild(script);
-    const timer = setTimeout(()=>{
-      if(!done){ cleanup(); reject(new Error("Tiempo de espera agotado al conectar con Google Sheets.")); }
-    }, 12000);
-  });
-}
-
-async function loadLog(silent){
-  if(!sheetsUrl){
-    syncOk = false;
-    setSyncStatus("Configura la conexión a Google Sheets arriba.");
-    renderTable();
-    return;
-  }
-  try{
-    const data = await jsonp(sheetsUrl, { action: "list", grade: currentGrade });
-    if(data.status === "error") throw new Error(data.message || "Error desconocido.");
-    records[currentGrade] = (data.records || []).map(r=>({
-      id: r.id, name: r.name, motivo: r.motivo, observaciones: r.observaciones,
-      salida: r.salida, regreso: r.regreso
-    }));
-    syncOk = true;
-    setSyncStatus();
-  }catch(e){
-    syncOk = false;
-    setSyncStatus(e.message || "No se pudo conectar con la hoja de cálculo.");
-  }
-  renderTable();
-  updateStatusCard();
-}
-
-async function postToSheet(payload){
-  const data = await jsonp(sheetsUrl, payload);
-  if(data.status !== "ok"){
-    throw new Error(data.message || "Error al guardar en la hoja de cálculo.");
-  }
-  return data;
-}
-
 function setSyncStatus(customMsg){
   const dot = document.getElementById("syncDot");
   const sub = document.getElementById("sub-status");
@@ -565,11 +476,39 @@ function setSyncStatus(customMsg){
   }
   if(syncOk){
     dot.className = "sync-dot";
-    sub.innerHTML = "<span class='sync-dot' id='syncDot'></span>conectado a Google Sheets";
+    sub.innerHTML = "<span class='sync-dot' id='syncDot'></span>conectado en tiempo real";
   } else {
     dot.className = "sync-dot off";
     sub.innerHTML = "<span class='sync-dot off' id='syncDot'></span>sin conexión";
   }
+}
+
+function attachListener(){
+  if(!firebaseReady){
+    renderTable();
+    updateStatusCard();
+    return;
+  }
+  if(currentDbRef){ currentDbRef.off(); }
+  currentDbRef = db.ref("logs/" + currentGrade);
+  currentDbRef.on("value", snapshot=>{
+    const val = snapshot.val() || {};
+    records[currentGrade] = Object.keys(val).map(key=>({
+      id: key,
+      name: val[key].name,
+      motivo: val[key].motivo,
+      observaciones: val[key].observaciones,
+      salida: val[key].salida,
+      regreso: val[key].regreso || null
+    }));
+    syncOk = true;
+    setSyncStatus();
+    renderTable();
+    updateStatusCard();
+  }, error=>{
+    syncOk = false;
+    setSyncStatus("Error de conexión: " + error.message);
+  });
 }
 
 function renderTable(){
@@ -580,7 +519,7 @@ function renderTable(){
     return;
   }
   body.innerHTML = list.map(r=>{
-    const estado = r.regreso ? "<span class='pill in'>En el salón</span>" : "<span class='pill out'>Fuera (" + fmtDuration(r.salida, null) + ")</span>";
+    const estado = r.regreso ? "<span class='pill in'>En el salón</span>" : "<span class='pill out'>Fuera (" + fmtDuration(r.salida) + ")</span>";
     return "<tr>" +
       "<td>" + escapeHtml(r.name) + "</td>" +
       "<td>" + escapeHtml(r.motivo || "—") + "</td>" +
@@ -595,8 +534,8 @@ function renderTable(){
 async function registrarSalida(){
   const name = document.getElementById("studentSelect").value;
   if(!name) return;
-  if(!sheetsUrl){
-    showMsg("Primero configura la conexión a Google Sheets (botón ⚙ Configurar).", "warn");
+  if(!firebaseReady){
+    showMsg("Firebase no está configurado. Edita firebaseConfig en el código.", "warn");
     return;
   }
   if(findActiveRecord(currentGrade, name)){
@@ -605,21 +544,16 @@ async function registrarSalida(){
   }
   const motivo = document.getElementById("motivo").value.trim();
   const observaciones = document.getElementById("observaciones").value.trim();
-  const btn = document.getElementById("btnSalida");
-  btn.disabled = true;
   try{
     const now = Date.now();
-    await postToSheet({
-      action: "salida", grade: currentGrade, gradeLabel: GRADES[currentGrade].label,
-      name, motivo, observaciones
+    await db.ref("logs/" + currentGrade).push({
+      name, motivo, observaciones, salida: now, regreso: null
     });
     showMsg("Salida registrada para " + name + " a las " + fmtTime(now) + ".", "ok");
     document.getElementById("motivo").value = "";
     document.getElementById("observaciones").value = "";
-    await loadLog(true);
   }catch(e){
-    showMsg("No se pudo guardar en la hoja de cálculo: " + e.message, "warn");
-    updateStatusCard();
+    showMsg("No se pudo guardar: " + e.message, "warn");
   }
 }
 
@@ -631,34 +565,28 @@ async function registrarRegreso(){
     return;
   }
   const obs = document.getElementById("observaciones").value.trim();
-  const btn = document.getElementById("btnRegreso");
-  btn.disabled = true;
   try{
     const now = Date.now();
-    await postToSheet({
-      action: "regreso", grade: currentGrade, gradeLabel: GRADES[currentGrade].label,
-      name, observaciones: obs
-    });
+    const updates = { regreso: now };
+    if(obs) updates.observaciones = obs;
+    await db.ref("logs/" + currentGrade + "/" + active.id).update(updates);
     showMsg("Regreso registrado para " + name + " a las " + fmtTime(now) + ".", "ok");
     document.getElementById("observaciones").value = "";
-    await loadLog(true);
   }catch(e){
-    showMsg("No se pudo guardar en la hoja de cálculo: " + e.message, "warn");
-    updateStatusCard();
+    showMsg("No se pudo guardar: " + e.message, "warn");
   }
 }
 
 document.getElementById("btnSalida").addEventListener("click", registrarSalida);
 document.getElementById("btnRegreso").addEventListener("click", registrarRegreso);
 document.getElementById("studentSelect").addEventListener("change", ()=>{ clearMsg(); updateStatusCard(); });
-document.getElementById("refreshBtn").addEventListener("click", ()=> loadLog(false));
+document.getElementById("refreshBtn").addEventListener("click", ()=> attachListener());
 
 buildTabs();
 buildStudentSelect();
-loadConfig();
-loadLog(true);
-
-pollTimer = setInterval(()=> loadLog(true), 8000);
+initFirebase();
+attachListener();
+setInterval(()=>{ if(document.getElementById("statusCard").className.indexOf("out") >= 0) updateStatusCard(); }, 1000);
 </script>
 </body>
 </html>
