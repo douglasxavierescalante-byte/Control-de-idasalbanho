@@ -24,6 +24,7 @@
     --green-soft:#DCEEE3;
     --red:#B0392C;
     --red-soft:#F5DEDA;
+    --grey:#8B93A1;
   }
   *{box-sizing:border-box;}
   body{
@@ -65,12 +66,16 @@
     box-shadow:0 0 0 3px rgba(124,196,154,0.25);
   }
   .sync-dot.off{background:#D98A6D;box-shadow:0 0 0 3px rgba(217,138,109,0.25);}
-  .tabs{
+  .tabs-row{
     display:flex;
-    gap:8px;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    flex-wrap:wrap;
     margin-bottom:16px;
     border-bottom:2px solid var(--line);
   }
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;}
   .tab{
     padding:10px 18px;
     font-size:14px;
@@ -104,7 +109,7 @@
     color:var(--ink-soft);
     margin-bottom:6px;
   }
-  select, input[type=text]{
+  select, input[type=text], input[type=date], textarea{
     width:100%;
     padding:11px 12px;
     font-size:15px;
@@ -114,7 +119,9 @@
     color:var(--ink);
     font-family:'Libre Franklin',sans-serif;
   }
-  select:focus, input[type=text]:focus{
+  textarea{font-family:'IBM Plex Mono',monospace;font-size:13px;resize:vertical;}
+  input[type=date]{font-family:'IBM Plex Mono',monospace;font-size:13px;width:auto;}
+  select:focus, input:focus, textarea:focus{
     outline:none;
     border-color:var(--navy);
   }
@@ -155,6 +162,7 @@
   button.action:active{transform:scale(0.98);}
   button.salida{background:var(--amber);}
   button.regreso{background:var(--green);}
+  button.neutral{background:var(--grey);}
   button.action:disabled{background:#C7C3B6;cursor:not-allowed;}
   .msg{
     margin-top:12px;
@@ -171,6 +179,8 @@
     align-items:center;
     justify-content:space-between;
     margin-bottom:10px;
+    flex-wrap:wrap;
+    gap:10px;
   }
   .log-header h2{
     font-size:15px;
@@ -178,6 +188,7 @@
     margin:0;
     color:var(--navy);
   }
+  .date-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
   .refresh-btn{
     border:1.5px solid var(--line);
     background:#fff;
@@ -187,7 +198,30 @@
     border-radius:20px;
     cursor:pointer;
     font-family:'Libre Franklin',sans-serif;
+    white-space:nowrap;
   }
+  .add-grade-btn{
+    border:1.5px dashed var(--navy);
+    background:#fff;
+    color:var(--navy);
+    font-size:13px;
+    font-weight:600;
+    padding:9px 14px;
+    border-radius:10px;
+    cursor:pointer;
+    font-family:'Libre Franklin',sans-serif;
+    margin-bottom:10px;
+  }
+  .history-banner{
+    background:var(--amber-soft);
+    color:#6B4713;
+    padding:8px 12px;
+    border-radius:8px;
+    font-size:13px;
+    margin-bottom:10px;
+    display:none;
+  }
+  .history-banner.show{display:block;}
   table{width:100%;border-collapse:collapse;font-size:13px;}
   thead th{
     text-align:left;
@@ -243,7 +277,27 @@
     </div>
   </header>
 
-  <div class="tabs" id="tabs"></div>
+  <button class="add-grade-btn" id="addGradeBtn">+ Agregar grado o sección</button>
+
+  <div class="panel" id="addGradePanel" style="display:none;">
+    <div class="field">
+      <label for="newGradeLabel">Nombre del grado y sección</label>
+      <input type="text" id="newGradeLabel" placeholder="Ej: 6° B">
+    </div>
+    <div class="field">
+      <label for="newGradeStudents">Lista de estudiantes (uno por línea, formato: APELLIDOS, NOMBRES)</label>
+      <textarea id="newGradeStudents" rows="8" placeholder="ABREGO PATRIZ, DARLYN FERNANDA&#10;AQUINO PATRIZ, NAOMY CAMILA..."></textarea>
+    </div>
+    <div class="btn-row">
+      <button class="action regreso" id="saveGradeBtn">Guardar grado</button>
+      <button class="action neutral" id="cancelGradeBtn">Cancelar</button>
+    </div>
+    <div class="msg" id="addGradeMsg"></div>
+  </div>
+
+  <div class="tabs-row">
+    <div class="tabs" id="tabs"></div>
+  </div>
 
   <div class="panel">
     <div class="field">
@@ -278,8 +332,13 @@
   <div class="panel">
     <div class="log-header">
       <h2 id="logTitle">Registro — 2° A</h2>
-      <button class="refresh-btn" id="refreshBtn">↻ Actualizar</button>
+      <div class="date-row">
+        <input type="date" id="dateSelect">
+        <button class="refresh-btn" id="todayBtn">Hoy</button>
+        <button class="refresh-btn" id="refreshBtn">↻ Actualizar</button>
+      </div>
     </div>
+    <div class="history-banner" id="historyBanner">Viendo historial de una fecha anterior — solo lectura. Las acciones de registrar salida/regreso siempre aplican al día de hoy.</div>
     <div class="table-scroll">
       <table>
         <thead>
@@ -304,7 +363,7 @@
 <script>
 // ── CONFIGURACIÓN DE FIREBASE ──────────────────────────────────
 // Pega aquí el objeto que Firebase te da en:
-// Configuración del proyecto → Tus apps → (ícono </>) 
+// Configuración del proyecto → Tus apps → (ícono </>)
 const firebaseConfig = {
   apiKey: "AIzaSyCbaOH1scaxexMH2zcnoYVzPSGB6Vgvo6c",
   authDomain: "control-salidas-3b9bf.firebaseapp.com",
@@ -316,7 +375,10 @@ const firebaseConfig = {
 };
 // ────────────────────────────────────────────────────────────────
 
-const GRADES = {
+// Grados incluidos por defecto en el código. Cualquier grado agregado
+// desde el botón "+ Agregar grado o sección" se guarda en Firebase y
+// se combina automáticamente con estos.
+const BASE_GRADES = {
   "2A": {
     label: "2° A",
     students: [
@@ -353,15 +415,27 @@ const GRADES = {
   }
 };
 
+let GRADES = { ...BASE_GRADES };
 let currentGrade = "2A";
-let records = {};
+let recordsToday = {};   // caché de HOY, usada para el estado y las acciones
+let recordsView = {};    // caché de la fecha que se está viendo en la tabla
+let viewedDate = todayStr();
 let syncOk = false;
-let currentDbRef = null;
 let db = null;
 let firebaseReady = false;
+let todayRef = null;
+let viewRef = null;
+
+function todayStr(){
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = (d.getMonth()+1).toString().padStart(2,"0");
+  const day = d.getDate().toString().padStart(2,"0");
+  return y + "-" + m + "-" + day;
+}
 
 function initFirebase(){
-  if(firebaseConfig.apiKey === "PEGA_AQUI" || !firebaseConfig.databaseURL){
+  if(!firebaseConfig.apiKey || firebaseConfig.apiKey === "PEGA_AQUI" || !firebaseConfig.databaseURL){
     setSyncStatus("Falta configurar Firebase (edita firebaseConfig en el código).");
     return;
   }
@@ -375,7 +449,7 @@ function initFirebase(){
 }
 
 function sortedStudents(gradeKey){
-  return [...GRADES[gradeKey].students].sort((a,b)=> a.localeCompare(b,'es',{sensitivity:'base'}));
+  return [...(GRADES[gradeKey] ? GRADES[gradeKey].students : [])].sort((a,b)=> a.localeCompare(b,'es',{sensitivity:'base'}));
 }
 
 function fmtTime(ts){
@@ -421,13 +495,17 @@ function buildStudentSelect(){
 function onGradeChange(){
   buildTabs();
   buildStudentSelect();
+  viewedDate = todayStr();
+  document.getElementById("dateSelect").value = viewedDate;
+  updateHistoryBanner();
   document.getElementById("logTitle").textContent = "Registro — " + GRADES[currentGrade].label;
   clearMsg();
-  attachListener();
+  attachTodayListener();
+  attachViewListener();
 }
 
 function findActiveRecord(gradeKey, name){
-  const list = records[gradeKey] || [];
+  const list = recordsToday[gradeKey] || [];
   return list.find(r => r.name === name && !r.regreso);
 }
 
@@ -462,8 +540,7 @@ function showMsg(text, type){
   box.className = "msg show " + type;
 }
 function clearMsg(){
-  const box = document.getElementById("msgBox");
-  box.className = "msg";
+  document.getElementById("msgBox").className = "msg";
 }
 
 function setSyncStatus(customMsg){
@@ -483,39 +560,66 @@ function setSyncStatus(customMsg){
   }
 }
 
-function attachListener(){
-  if(!firebaseReady){
-    renderTable();
-    updateStatusCard();
-    return;
-  }
-  if(currentDbRef){ currentDbRef.off(); }
-  currentDbRef = db.ref("logs/" + currentGrade);
-  currentDbRef.on("value", snapshot=>{
-    const val = snapshot.val() || {};
-    records[currentGrade] = Object.keys(val).map(key=>({
-      id: key,
-      name: val[key].name,
-      motivo: val[key].motivo,
-      observaciones: val[key].observaciones,
-      salida: val[key].salida,
-      regreso: val[key].regreso || null
-    }));
+function updateHistoryBanner(){
+  const banner = document.getElementById("historyBanner");
+  banner.className = "history-banner" + (viewedDate !== todayStr() ? " show" : "");
+}
+
+function snapshotToArray(snapshot){
+  const val = snapshot.val() || {};
+  return Object.keys(val).map(key=>({
+    id: key,
+    name: val[key].name,
+    motivo: val[key].motivo,
+    observaciones: val[key].observaciones,
+    salida: val[key].salida,
+    regreso: val[key].regreso || null
+  }));
+}
+
+function attachTodayListener(){
+  if(!firebaseReady){ renderTable(); updateStatusCard(); return; }
+  if(todayRef) todayRef.off();
+  const grade = currentGrade;
+  todayRef = db.ref("logs/" + grade + "/" + todayStr());
+  todayRef.on("value", snapshot=>{
+    recordsToday[grade] = snapshotToArray(snapshot);
     syncOk = true;
     setSyncStatus();
-    renderTable();
-    updateStatusCard();
+    if(viewedDate === todayStr() && grade === currentGrade){
+      recordsView[grade] = recordsToday[grade];
+      renderTable();
+    }
+    if(grade === currentGrade) updateStatusCard();
   }, error=>{
     syncOk = false;
     setSyncStatus("Error de conexión: " + error.message);
   });
 }
 
+function attachViewListener(){
+  if(!firebaseReady){ renderTable(); return; }
+  if(viewRef){ viewRef.off(); viewRef = null; }
+  const grade = currentGrade;
+  if(viewedDate === todayStr()){
+    recordsView[grade] = recordsToday[grade] || [];
+    renderTable();
+    return;
+  }
+  viewRef = db.ref("logs/" + grade + "/" + viewedDate);
+  viewRef.on("value", snapshot=>{
+    recordsView[grade] = snapshotToArray(snapshot);
+    if(grade === currentGrade) renderTable();
+  }, error=>{
+    showMsg("No se pudo cargar el historial de esa fecha: " + error.message, "warn");
+  });
+}
+
 function renderTable(){
   const body = document.getElementById("logBody");
-  const list = [...(records[currentGrade] || [])].sort((a,b)=> b.salida - a.salida);
+  const list = [...(recordsView[currentGrade] || [])].sort((a,b)=> b.salida - a.salida);
   if(list.length === 0){
-    body.innerHTML = "<tr class='empty-row'><td colspan='6'>Aún no hay registros para " + GRADES[currentGrade].label + ".</td></tr>";
+    body.innerHTML = "<tr class='empty-row'><td colspan='6'>No hay registros para " + GRADES[currentGrade].label + " en esta fecha.</td></tr>";
     return;
   }
   body.innerHTML = list.map(r=>{
@@ -546,7 +650,7 @@ async function registrarSalida(){
   const observaciones = document.getElementById("observaciones").value.trim();
   try{
     const now = Date.now();
-    await db.ref("logs/" + currentGrade).push({
+    await db.ref("logs/" + currentGrade + "/" + todayStr()).push({
       name, motivo, observaciones, salida: now, regreso: null
     });
     showMsg("Salida registrada para " + name + " a las " + fmtTime(now) + ".", "ok");
@@ -569,7 +673,7 @@ async function registrarRegreso(){
     const now = Date.now();
     const updates = { regreso: now };
     if(obs) updates.observaciones = obs;
-    await db.ref("logs/" + currentGrade + "/" + active.id).update(updates);
+    await db.ref("logs/" + currentGrade + "/" + todayStr() + "/" + active.id).update(updates);
     showMsg("Regreso registrado para " + name + " a las " + fmtTime(now) + ".", "ok");
     document.getElementById("observaciones").value = "";
   }catch(e){
@@ -577,15 +681,90 @@ async function registrarRegreso(){
   }
 }
 
+function attachGradesListener(){
+  if(!firebaseReady) return;
+  db.ref("grades").on("value", snapshot=>{
+    const val = snapshot.val() || {};
+    GRADES = { ...BASE_GRADES };
+    Object.keys(val).forEach(key=>{
+      if(val[key] && val[key].label && Array.isArray(val[key].students)){
+        GRADES[key] = { label: val[key].label, students: val[key].students };
+      }
+    });
+    if(!GRADES[currentGrade]){
+      currentGrade = Object.keys(GRADES)[0];
+    }
+    buildTabs();
+    buildStudentSelect();
+    document.getElementById("logTitle").textContent = "Registro — " + GRADES[currentGrade].label;
+    attachTodayListener();
+    attachViewListener();
+  });
+}
+
+async function saveNewGrade(){
+  const label = document.getElementById("newGradeLabel").value.trim();
+  const raw = document.getElementById("newGradeStudents").value;
+  const students = raw.split("\n").map(s=>s.trim()).filter(Boolean);
+  const msg = document.getElementById("addGradeMsg");
+  if(!label || students.length === 0){
+    msg.className = "msg show warn";
+    msg.textContent = "Escribe un nombre de grado y al menos un estudiante.";
+    return;
+  }
+  if(!firebaseReady){
+    msg.className = "msg show warn";
+    msg.textContent = "Firebase no está configurado.";
+    return;
+  }
+  try{
+    const ref = db.ref("grades").push();
+    await ref.set({ label, students });
+    msg.className = "msg show ok";
+    msg.textContent = "Grado \"" + label + "\" agregado correctamente.";
+    document.getElementById("newGradeLabel").value = "";
+    document.getElementById("newGradeStudents").value = "";
+    currentGrade = ref.key;
+    document.getElementById("addGradePanel").style.display = "none";
+  }catch(e){
+    msg.className = "msg show warn";
+    msg.textContent = "Error al guardar: " + e.message;
+  }
+}
+
 document.getElementById("btnSalida").addEventListener("click", registrarSalida);
 document.getElementById("btnRegreso").addEventListener("click", registrarRegreso);
 document.getElementById("studentSelect").addEventListener("change", ()=>{ clearMsg(); updateStatusCard(); });
-document.getElementById("refreshBtn").addEventListener("click", ()=> attachListener());
+document.getElementById("refreshBtn").addEventListener("click", ()=>{ attachTodayListener(); attachViewListener(); });
+document.getElementById("dateSelect").addEventListener("change", (e)=>{
+  viewedDate = e.target.value || todayStr();
+  updateHistoryBanner();
+  attachViewListener();
+});
+document.getElementById("todayBtn").addEventListener("click", ()=>{
+  viewedDate = todayStr();
+  document.getElementById("dateSelect").value = viewedDate;
+  updateHistoryBanner();
+  attachViewListener();
+});
+document.getElementById("addGradeBtn").addEventListener("click", ()=>{
+  const p = document.getElementById("addGradePanel");
+  p.style.display = p.style.display === "none" ? "block" : "none";
+});
+document.getElementById("cancelGradeBtn").addEventListener("click", ()=>{
+  document.getElementById("addGradePanel").style.display = "none";
+});
+document.getElementById("saveGradeBtn").addEventListener("click", saveNewGrade);
+
+document.getElementById("dateSelect").max = todayStr();
+document.getElementById("dateSelect").value = viewedDate;
 
 buildTabs();
 buildStudentSelect();
 initFirebase();
-attachListener();
+attachGradesListener();
+attachTodayListener();
+attachViewListener();
 setInterval(()=>{ if(document.getElementById("statusCard").className.indexOf("out") >= 0) updateStatusCard(); }, 1000);
 </script>
 </body>
