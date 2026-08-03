@@ -67,6 +67,31 @@ git remote add origin https://github.com/TU-USUARIO/TU-REPOSITORIO.git
 git push -u origin main
 ```
 
+## Nuevas funciones
+
+- **Historial por fecha**: cada día se guarda por separado. Usa el selector de fecha
+  en el panel de registro para ver días anteriores. Los botones de registrar
+  salida/regreso solo funcionan cuando estás viendo el día de "Hoy".
+- **Agregar grados/secciones sin tocar el código**: cualquier docente puede usar el
+  botón **"+ Agregar grado o sección"**, pegar el nombre y la lista de estudiantes
+  (uno por línea), y aparecerá automáticamente para todos los que tengan la app
+  abierta — se guarda en Firebase, no en el archivo.
+
+## Nuevas funciones
+
+**Historial por fecha:** cada día se guarda por separado en Firebase
+(`logs/{grado}/{AAAA-MM-DD}/...`). Usa el selector de fecha junto al historial para
+ver días anteriores. Los botones "Registrar salida" / "Registrar regreso" **siempre**
+aplican al día de hoy, sin importar qué fecha estés viendo — así el historial pasado
+queda protegido de cambios accidentales.
+
+**Grados dinámicos:** el botón **"+ Agregar grado o sección"** permite que cualquier
+docente pegue su propia lista de estudiantes (un nombre por línea). Se guarda en
+Firebase bajo `grades/` y aparece automáticamente como una pestaña nueva para todos
+los que tengan la app abierta, sin necesidad de tocar el código ni republicar nada.
+Los grados "2° A" y "5° C" que vienen incluidos en el código siempre estarán
+disponibles como base.
+
 ## ¿Por qué Firebase y no Google Sheets?
 
 Los navegadores bloquean por seguridad (CORS) las llamadas directas desde una página
